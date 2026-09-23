@@ -1,405 +1,1101 @@
-import React, { useState, useCallback, useMemo } from 'react';
-import {
-  LineChart, Line, BarChart, Bar, PieChart, Pie, Cell,
-  XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, ResponsiveContainer
-} from 'recharts';
-import { UploadCloud, FileText, LayoutDashboard, Store, Tags, Calendar, DollarSign, ShoppingCart, Percent, TrendingUp } from 'lucide-react';
+<!DOCTYPE html>
+<html lang="ko" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sales Analytics Dashboard</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Chart.js CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- html2pdf.js CDN (PDF 저장용) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <!-- FontAwesome Icons CDN -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Poppins:wght@600;700;800&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        display: ['Poppins', 'sans-serif'],
+                    },
+                    colors: {
+                        brand: {
+                            orange: '#e07a3c',
+                            lightOrange: '#f59e6c',
+                            dark: '#050505',
+                            card: '#0f0f0f',
+                            border: '#222222'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body {
+            background-color: #050505;
+            color: #ffffff;
+            font-family: 'Inter', sans-serif;
+            min-height: 100vh;
+        }
 
-// 외부 라이브러리 없이 엑셀 CSV 포맷(따옴표 내 쉼표 무시 등)을 안전하게 파싱하는 함수입니다.
-function parseCSV(str) {
-  const arr = [];
-  let quote = false;
-  let row = 0, col = 0;
-  for (let c = 0; c < str.length; c++) {
-    let cc = str[c], nc = str[c + 1];
-    arr[row] = arr[row] || [];
-    arr[row][col] = arr[row][col] || '';
-    if (cc === '"' && quote && nc === '"') { arr[row][col] += cc; ++c; continue; }
-    if (cc === '"') { quote = !quote; continue; }
-    if (cc === ',' && !quote) { ++col; continue; }
-    if (cc === '\r' && nc === '\n' && !quote) { ++row; col = 0; ++c; continue; }
-    if (cc === '\n' && !quote) { ++row; col = 0; continue; }
-    if (cc === '\r' && !quote) { ++row; col = 0; continue; }
-    arr[row][col] += cc;
-  }
-  
-  if (arr.length < 2) return [];
-  
-  const headers = arr[0].map(h => h.trim());
-  const data = [];
-  for (let i = 1; i < arr.length; i++) {
-    if (arr[i].length !== headers.length) continue;
-    let obj = {};
-    arr[i].forEach((val, idx) => {
-      let cleanVal = val.trim();
-      // 숫자 파싱 (쉼표 제거)
-      const numVal = Number(cleanVal.replace(/,/g, ''));
-      obj[headers[idx]] = isNaN(numVal) || cleanVal === '' ? cleanVal : numVal;
-    });
-    data.push(obj);
-  }
-  return data;
-}
+        /* Ambient Glow Background Effect */
+        .ambient-glow {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-image: radial-gradient(circle at 90% 110%, rgba(224, 122, 60, 0.22) 0%, rgba(200, 60, 40, 0.08) 35%, rgba(5, 5, 5, 1) 70%);
+            background-repeat: no-repeat;
+            pointer-events: none;
+            z-index: 0;
+        }
 
-const CustomTooltip = ({ active, payload, label }) => {
-  if (active && payload && payload.length) {
-    return (
-      <div className="bg-[#111] border border-gray-800 p-3 rounded-lg shadow-xl text-sm">
-        <p className="text-gray-400 mb-2 font-medium">{label}</p>
-        {payload.map((entry, index) => (
-          <p key={index} style={{ color: entry.color }} className="font-semibold">
-            {entry.name}: {entry.value?.toLocaleString()}원
-          </p>
-        ))}
-      </div>
-    );
-  }
-  return null;
-};
+        /* Typography underline effect */
+        .heading-underline {
+            position: relative;
+            display: inline-block;
+        }
+        .heading-underline::after {
+            content: '';
+            position: absolute;
+            left: 0;
+            bottom: 0.1em;
+            width: 100%;
+            height: 4px;
+            background-color: #e07a3c;
+            border-radius: 2px;
+        }
 
-function KPICard({ title, value, icon, prefix = '', suffix = '' }) {
-  return (
-    <div className="bg-[#0f0f0f] p-6 rounded-xl border border-gray-800 flex items-center shadow-lg transition-transform hover:-translate-y-1">
-      <div className="p-4 bg-[#e07a3c]/10 text-[#e07a3c] rounded-lg mr-4">
-        {icon}
-      </div>
-      <div>
-        <h3 className="text-sm font-medium text-gray-400 mb-1">{title}</h3>
-        <p className="text-2xl font-bold text-white tracking-tight">
-          {prefix}{Number(value || 0).toLocaleString()}{suffix}
-        </p>
-      </div>
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #0f0f0f;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #333;
+            border-radius: 3px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #e07a3c;
+        }
+
+        .tab-btn.active {
+            border-bottom-color: #e07a3c;
+            color: #ffffff;
+            background-color: rgba(255, 255, 255, 0.05);
+        }
+
+        /* Page break utilities for PDF export */
+        .pdf-avoid-break {
+            page-break-inside: avoid;
+            break-inside: avoid;
+        }
+
+        /* Print media styles */
+        @media print {
+            .no-print, #landing-view, #pdf-dropdown-wrapper, label[for="csv-file-reinput"], #chat-widget-container, .ambient-glow {
+                display: none !important;
+            }
+            body {
+                background-color: #050505 !important;
+                color: #ffffff !important;
+                -webkit-print-color-adjust: exact !important;
+                print-color-adjust: exact !important;
+            }
+            .tab-btn {
+                display: none !important;
+            }
+        }
+    </style>
+</head>
+<body class="relative flex flex-col min-h-screen overflow-x-hidden">
+
+    <!-- Ambient Glow Overlay -->
+    <div class="ambient-glow"></div>
+
+    <!-- Loading Modal for PDF Generation -->
+    <div id="pdf-loading-overlay" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-[100] hidden flex flex-col items-center justify-center transition-all duration-300">
+        <div class="bg-[#141414] border border-gray-800 rounded-2xl p-8 max-w-sm w-full mx-4 text-center shadow-2xl flex flex-col items-center">
+            <div class="w-16 h-16 border-4 border-[#e07a3c]/20 border-t-[#e07a3c] rounded-full animate-spin mb-5"></div>
+            <h3 class="text-xl font-bold text-white mb-2" id="pdf-loading-title">PDF 문서 생성 중</h3>
+            <p class="text-sm text-gray-400" id="pdf-loading-desc">차트 및 데이터 리포트를 고해상도로 렌더링하고 있습니다...</p>
+        </div>
     </div>
-  );
-}
 
-function TabButton({ active, onClick, icon, label }) {
-  return (
-    <button
-      onClick={onClick}
-      className={`flex items-center px-6 py-4 text-sm font-semibold whitespace-nowrap transition-colors duration-200 ${
-        active 
-          ? 'border-b-2 border-[#e07a3c] text-white bg-white/5' 
-          : 'border-b-2 border-transparent text-gray-500 hover:text-gray-300 hover:bg-white/5'
-      }`}
-    >
-      <span className="mr-2">{icon}</span>
-      {label}
-    </button>
-  );
-}
+    <!-- MAIN CONTAINER -->
+    <div id="app" class="relative z-10 flex-grow flex flex-col">
 
-function StatsTable({ title, data, nameLabel, nameKey = 'name' }) {
-  return (
-    <div className="bg-[#0f0f0f] rounded-xl shadow-lg border border-gray-800 overflow-hidden">
-       <div className="p-6 border-b border-gray-800">
-          <h2 className="text-lg font-bold text-white">{title}</h2>
-       </div>
-       <div className="overflow-x-auto">
-         <table className="w-full text-sm text-left text-gray-300">
-            <thead className="text-xs text-gray-400 uppercase bg-[#1a1a1a] border-b border-gray-800">
-                <tr>
-                    <th className="px-6 py-4 font-semibold">{nameLabel}</th>
-                    <th className="px-6 py-4 font-semibold text-right">매출액</th>
-                    <th className="px-6 py-4 font-semibold text-right">판매수량</th>
-                    <th className="px-6 py-4 font-semibold text-right">할인액</th>
-                    <th className="px-6 py-4 font-semibold text-right">객단가</th>
-                </tr>
-            </thead>
-            <tbody>
-                {data.map((row, idx) => (
-                    <tr key={idx} className="border-b border-gray-800 hover:bg-white/5 transition-colors">
-                        <td className="px-6 py-4 font-medium text-white">{row[nameKey]}</td>
-                        <td className="px-6 py-4 text-right text-[#e07a3c] font-semibold">{row.sales?.toLocaleString()}원</td>
-                        <td className="px-6 py-4 text-right">{row.qty?.toLocaleString()}개</td>
-                        <td className="px-6 py-4 text-right text-red-400">{row.discount?.toLocaleString()}원</td>
-                        <td className="px-6 py-4 text-right">{row.qty > 0 ? Math.round(row.sales / row.qty).toLocaleString() : 0}원</td>
-                    </tr>
-                ))}
-            </tbody>
-         </table>
-       </div>
-    </div>
-  );
-}
+        <!-- 1. INITIAL LANDING & UPLOAD VIEW -->
+        <section id="landing-view" class="flex-grow flex flex-col justify-center px-6 md:px-12 lg:px-24 py-12">
+            <div class="max-w-4xl">
+                <h1 class="font-display text-5xl md:text-7xl lg:text-[5.5rem] font-extrabold leading-[1.1] tracking-tight mb-8">
+                    Simplifying the <br>
+                    <span class="heading-underline">Data</span> <br>
+                    process
+                </h1>
+                
+                <p class="text-gray-400 text-lg md:text-xl max-w-xl leading-relaxed mb-10">
+                    매출 CSV 파일을 업로드하여 실시간 대시보드를 확인하세요. 점포별, 카테고리별, 일자별 상세 분석 및 고화질 PDF 리포트 저장 기능을 제공합니다.
+                </p>
 
-export default function SalesDashboard() {
-  const [data, setData] = useState([]);
-  const [fileName, setFileName] = useState('');
-  const [activeTab, setActiveTab] = useState('overview');
+                <!-- CSV Upload Box -->
+                <div class="inline-block bg-[#0f0f0f] border border-gray-800 p-8 rounded-xl shadow-2xl max-w-md w-full transition-all hover:border-gray-700">
+                    <div class="flex flex-col items-center justify-center text-center">
+                        <div class="w-16 h-16 bg-[#e07a3c]/10 text-[#e07a3c] rounded-2xl flex items-center justify-center mb-4 text-2xl">
+                            <i class="fas fa-cloud-arrow-up"></i>
+                        </div>
+                        <h3 class="text-xl font-bold text-white mb-2">매출 데이터 업로드</h3>
+                        <p class="text-xs text-gray-400 mb-6">CSV 형식의 파일(일자, 점포, 카테고리, 매출액 등)을 선택해 주세요.</p>
+                        
+                        <input type="file" id="csv-file-input" accept=".csv" class="hidden">
+                        <label for="csv-file-input" class="cursor-pointer inline-flex items-center justify-center w-full bg-white text-black px-6 py-3 rounded-sm font-bold hover:bg-gray-200 transition-colors text-sm shadow-lg">
+                            <i class="fas fa-file-csv mr-2 text-lg"></i> 파일 선택하기
+                        </label>
 
-  const COLORS = ['#e07a3c', '#f59e6c', '#fcd34d', '#fbbf24', '#f87171', '#fca5a5'];
+                        <!-- Sample Data Quick Button -->
+                        <button onclick="loadSampleData()" type="button" class="mt-4 text-xs text-gray-400 hover:text-[#e07a3c] transition-colors flex items-center gap-1.5 underline underline-offset-4">
+                            <i class="fas fa-wand-magic-sparkles text-[#e07a3c]"></i> 샘플 데이터로 즉시 체험해보기
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </section>
 
-  const handleFileUpload = useCallback((event) => {
-    const file = event.target.files[0];
-    if (file) {
-      setFileName(file.name);
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        const text = e.target.result;
-        const parsedData = parseCSV(text);
-        setData(parsedData);
-      };
-      // 한글 인코딩 깨짐을 방지하려면 'euc-kr'이 필요할 수 있으나 기본적으로 'utf-8' 사용
-      reader.readAsText(file, 'utf-8'); 
-    }
-  }, []);
-
-  const { kpis, salesByDate, salesByStore, salesByCategory, storeStats, categoryStats, dateStats } = useMemo(() => {
-    if (!data || data.length === 0) {
-      return { kpis: null, salesByDate: [], salesByStore: [], salesByCategory: [], storeStats: [], categoryStats: [], dateStats: [] };
-    }
-
-    let totalSales = 0, totalQty = 0, totalDiscount = 0;
-    const dateMap = {}, storeMap = {}, categoryMap = {};
-
-    data.forEach(row => {
-      const sales = Number(row['매출액']) || 0;
-      const qty = Number(row['판매수량']) || 0;
-      const discount = Number(row['할인액']) || 0;
-      const date = row['일자'] || '기타';
-      const store = row['점포'] || '기타';
-      const category = row['카테고리'] || '기타';
-
-      totalSales += sales;
-      totalQty += qty;
-      totalDiscount += discount;
-
-      const aggregate = (map, key) => {
-        if (!map[key]) map[key] = { sales: 0, qty: 0, discount: 0 };
-        map[key].sales += sales;
-        map[key].qty += qty;
-        map[key].discount += discount;
-      };
-
-      aggregate(dateMap, date);
-      aggregate(storeMap, store);
-      aggregate(categoryMap, category);
-    });
-
-    const formatStats = (mapData, nameKey = 'name') =>
-      Object.entries(mapData)
-        .map(([name, stats]) => ({ [nameKey]: name, ...stats, value: stats.sales }))
-        .sort((a, b) => b.sales - a.sales);
-
-    const formattedDateStats = Object.entries(dateMap)
-        .map(([date, stats]) => ({ date, ...stats, value: stats.sales }))
-        .sort((a, b) => (a.date > b.date ? 1 : -1));
-
-    return {
-      kpis: {
-        totalSales, totalQty, totalDiscount,
-        avgPrice: totalQty > 0 ? Math.round(totalSales / totalQty) : 0
-      },
-      salesByDate: formattedDateStats.map(d => ({ date: d.date, sales: d.sales })),
-      salesByStore: formatStats(storeMap).map(s => ({ name: s.name, value: s.sales })),
-      salesByCategory: formatStats(categoryMap).map(c => ({ name: c.name, value: c.sales })),
-      storeStats: formatStats(storeMap),
-      categoryStats: formatStats(categoryMap),
-      dateStats: formattedDateStats
-    };
-  }, [data]);
-
-  if (data.length === 0) {
-    return (
-      <div className="min-h-screen bg-[#050505] text-white flex flex-col justify-center px-6 md:px-12 lg:px-24 relative overflow-hidden font-sans">
-        <div className="absolute top-0 left-0 w-full h-full bg-[radial-gradient(circle_at_90%_110%,_rgba(224,122,60,0.3)_0%,_rgba(200,60,40,0.15)_30%,_rgba(5,5,5,1)_70%)] pointer-events-none"></div>
-        
-        <div className="max-w-4xl z-10 relative">
-            <h1 className="text-5xl md:text-7xl lg:text-[5.5rem] font-extrabold leading-[1.1] tracking-tight mb-8 font-sans">
-                Simplifying the <br />
-                <span className="relative inline-block">
-                    Data
-                    <span className="absolute left-0 bottom-[0.1em] w-full h-1 bg-[#e07a3c] rounded-full"></span>
-                </span> <br />
-                process
-            </h1>
+        <!-- 2. DASHBOARD VIEW (Hidden until file is loaded) -->
+        <section id="dashboard-view" class="hidden max-w-7xl w-full mx-auto p-6 md:p-8">
             
-            <p className="text-gray-400 text-lg md:text-xl max-w-xl leading-relaxed mb-10">
-                Upload your CSV sales file to instantly visualize insights. Through proven strategy we amplify your business into a force.
-            </p>
-            
-            <div className="inline-block bg-[#111] border border-gray-800 p-8 rounded-xl shadow-2xl max-w-md w-full">
-                <div className="flex flex-col items-center justify-center text-center">
-                <UploadCloud className="w-16 h-16 text-[#e07a3c] mb-4" />
-                <h3 className="text-xl font-bold text-white mb-2">매출 데이터 업로드</h3>
-                <p className="text-sm text-gray-400 mb-6">CSV 형식의 매출 파일을 선택해주세요.</p>
-                <input
-                    type="file"
-                    accept=".csv"
-                    onChange={handleFileUpload}
-                    className="hidden"
-                    id="file-upload"
-                />
-                <label
-                    htmlFor="file-upload"
-                    className="cursor-pointer inline-flex items-center justify-center w-full bg-white text-black px-6 py-3 rounded-sm font-bold hover:bg-gray-200 transition-colors"
-                >
-                    파일 선택하기
-                </label>
+            <!-- Top Header Bar -->
+            <header class="flex flex-col md:flex-row md:items-center justify-between mb-8 pb-6 border-b border-gray-800 gap-4">
+                <div>
+                    <h1 class="text-3xl font-extrabold tracking-tight mb-2">Sales Analytics Dashboard</h1>
+                    <div class="flex items-center text-sm text-gray-400 gap-2">
+                        <i class="fas fa-file-lines text-[#e07a3c]"></i>
+                        <span id="file-name-display" class="font-medium text-gray-300">filename.csv</span>
+                        <span>•</span>
+                        <span id="file-rows-display">0건의 데이터</span>
+                    </div>
                 </div>
-            </div>
-        </div>
-        
-        {/* RSNL Chat Widget Mock */}
-        <div className="fixed bottom-6 right-6 flex items-end gap-3 z-50">
-            <div className="hidden sm:flex bg-white text-black rounded-lg py-2 px-4 shadow-lg items-center gap-2 mb-2 animate-bounce cursor-pointer hover:bg-gray-100 transition-colors">
-                <div className="w-6 h-6 bg-black rounded-full flex items-center justify-center">
-                    <span className="text-white text-[10px] font-bold">R</span>
+
+                <!-- Header Actions: PDF Export Button + File Re-upload -->
+                <div class="flex items-center flex-wrap gap-3 no-print">
+                    <!-- PDF Export Dropdown -->
+                    <div class="relative inline-block text-left" id="pdf-dropdown-wrapper">
+                        <button id="pdf-btn" onclick="togglePdfDropdown(event)" type="button" class="inline-flex items-center px-4 py-2.5 bg-[#e07a3c] hover:bg-[#c8662e] text-white rounded-sm font-bold transition-all text-sm shadow-lg hover:shadow-orange-950/40">
+                            <i class="fas fa-file-pdf mr-2"></i> PDF 저장
+                            <i class="fas fa-chevron-down ml-2 text-xs opacity-80"></i>
+                        </button>
+
+                        <div id="pdf-dropdown-menu" class="hidden absolute right-0 mt-2 w-64 bg-[#141414] border border-gray-700 rounded-lg shadow-2xl py-2 z-50 divide-y divide-gray-800">
+                            <div class="px-3 py-1.5 text-[11px] font-semibold text-gray-400 uppercase tracking-wider">
+                                PDF 다운로드 옵션
+                            </div>
+                            <div class="py-1">
+                                <button onclick="exportToPDF('current')" type="button" class="w-full text-left px-3.5 py-2.5 text-sm text-gray-200 hover:bg-[#e07a3c] hover:text-white flex items-center gap-3 transition-colors group">
+                                    <div class="w-8 h-8 rounded bg-white/5 flex items-center justify-center text-[#e07a3c] group-hover:text-white group-hover:bg-white/20">
+                                        <i class="fas fa-table-columns text-xs"></i>
+                                    </div>
+                                    <div>
+                                        <div class="font-semibold text-white">현재 탭 화면 PDF</div>
+                                        <div class="text-[11px] text-gray-400 group-hover:text-white/80">현재 활성화된 분석 화면 저장</div>
+                                    </div>
+                                </button>
+                                <button onclick="exportToPDF('all')" type="button" class="w-full text-left px-3.5 py-2.5 text-sm text-gray-200 hover:bg-[#e07a3c] hover:text-white flex items-center gap-3 transition-colors group">
+                                    <div class="w-8 h-8 rounded bg-white/5 flex items-center justify-center text-[#e07a3c] group-hover:text-white group-hover:bg-white/20">
+                                        <i class="fas fa-file-lines text-xs"></i>
+                                    </div>
+                                    <div>
+                                        <div class="font-semibold text-white">전체 종합 리포트 PDF</div>
+                                        <div class="text-[11px] text-gray-400 group-hover:text-white/80">모든 탭 & 데이터표 전체 포함</div>
+                                    </div>
+                                </button>
+                            </div>
+                            <div class="py-1">
+                                <button onclick="window.print(); hidePdfDropdown();" type="button" class="w-full text-left px-3.5 py-2 text-sm text-gray-300 hover:bg-gray-800 flex items-center gap-3 transition-colors">
+                                    <div class="w-8 h-8 rounded bg-white/5 flex items-center justify-center text-gray-400">
+                                        <i class="fas fa-print text-xs"></i>
+                                    </div>
+                                    <div>
+                                        <div class="font-semibold">브라우저 인쇄 / PDF</div>
+                                        <div class="text-[11px] text-gray-500">인쇄 대화상자에서 PDF 저장</div>
+                                    </div>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Re-upload CSV Button -->
+                    <label for="csv-file-reinput" class="cursor-pointer inline-flex items-center px-5 py-2.5 bg-white text-black rounded-sm font-bold hover:bg-gray-200 transition-colors text-sm shadow-md">
+                        <i class="fas fa-rotate mr-2"></i> 다른 파일 선택
+                    </label>
+                    <input type="file" id="csv-file-reinput" accept=".csv" class="hidden">
                 </div>
-                <span className="text-sm font-medium">Welcome to RSNL Creative!</span>
-            </div>
-            <button className="bg-[#e07a3c] hover:bg-[#c8662e] text-white rounded-2xl w-14 h-14 flex items-center justify-center shadow-lg transition-transform transform hover:scale-105 relative">
-                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-                <span className="absolute top-0 right-0 w-3.5 h-3.5 bg-red-500 border-2 border-[#e07a3c] rounded-full"></span>
-            </button>
-        </div>
-      </div>
-    );
-  }
+            </header>
 
-  return (
-    <div className="min-h-screen bg-[#050505] text-white relative font-sans">
-      {/* Background Gradient */}
-      <div className="fixed top-0 left-0 w-full h-full bg-[radial-gradient(circle_at_90%_110%,_rgba(224,122,60,0.15)_0%,_rgba(200,60,40,0.05)_30%,_rgba(5,5,5,1)_70%)] pointer-events-none z-0"></div>
-
-      <div className="max-w-7xl mx-auto p-6 md:p-8 relative z-10">
-        
-        <header className="flex flex-col md:flex-row md:items-center justify-between mb-8 pb-6 border-b border-gray-800">
-          <div>
-            <h1 className="text-3xl font-extrabold tracking-tight mb-2">Sales Analytics</h1>
-            <div className="flex items-center text-sm text-gray-400">
-              <FileText size={16} className="mr-2" />
-              <span>{fileName}</span>
-              <span className="mx-2">•</span>
-              <span>총 {data.length.toLocaleString()}건의 데이터</span>
-            </div>
-          </div>
-          <div className="mt-4 md:mt-0">
-             <input type="file" accept=".csv" onChange={handleFileUpload} className="hidden" id="file-reupload" />
-            <label htmlFor="file-reupload" className="cursor-pointer inline-flex items-center px-5 py-2.5 bg-white text-black rounded-sm font-bold hover:bg-gray-200 transition-colors text-sm">
-              <UploadCloud size={18} className="mr-2" /> 새로운 파일
-            </label>
-          </div>
-        </header>
-
-        {/* 탭 네비게이션 */}
-        <div className="flex overflow-x-auto space-x-2 border-b border-gray-800 mb-8 scrollbar-hide">
-          <TabButton active={activeTab === 'overview'} onClick={() => setActiveTab('overview')} icon={<LayoutDashboard size={18} />} label="종합 요약" />
-          <TabButton active={activeTab === 'store'} onClick={() => setActiveTab('store')} icon={<Store size={18} />} label="점포별 분석" />
-          <TabButton active={activeTab === 'category'} onClick={() => setActiveTab('category')} icon={<Tags size={18} />} label="카테고리별 분석" />
-          <TabButton active={activeTab === 'date'} onClick={() => setActiveTab('date')} icon={<Calendar size={18} />} label="일자별 분석" />
-        </div>
-
-        {/* 콘텐츠 영역 */}
-        {activeTab === 'overview' && (
-          <div className="space-y-8 animate-in fade-in duration-500">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-              <KPICard title="총 매출액" value={kpis.totalSales} icon={<DollarSign size={24} />} suffix="원" />
-              <KPICard title="총 판매수량" value={kpis.totalQty} icon={<ShoppingCart size={24} />} suffix="개" />
-              <KPICard title="평균 객단가" value={kpis.avgPrice} icon={<TrendingUp size={24} />} suffix="원" />
-              <KPICard title="총 할인액" value={kpis.totalDiscount} icon={<Percent size={24} />} suffix="원" />
+            <!-- Navigation Tabs -->
+            <div class="flex overflow-x-auto space-x-2 border-b border-gray-800 mb-8 pb-1 scrollbar-hide no-print">
+                <button onclick="switchTab('overview')" id="tab-btn-overview" class="tab-btn active flex items-center px-6 py-3.5 text-sm font-semibold whitespace-nowrap border-b-2 border-transparent text-gray-400 hover:text-white transition-all rounded-t-lg">
+                    <i class="fas fa-chart-pie mr-2.5 text-[#e07a3c]"></i> 종합 요약
+                </button>
+                <button onclick="switchTab('store')" id="tab-btn-store" class="tab-btn flex items-center px-6 py-3.5 text-sm font-semibold whitespace-nowrap border-b-2 border-transparent text-gray-400 hover:text-white transition-all rounded-t-lg">
+                    <i class="fas fa-store mr-2.5 text-[#e07a3c]"></i> 점포별 분석
+                </button>
+                <button onclick="switchTab('category')" id="tab-btn-category" class="tab-btn flex items-center px-6 py-3.5 text-sm font-semibold whitespace-nowrap border-b-2 border-transparent text-gray-400 hover:text-white transition-all rounded-t-lg">
+                    <i class="fas fa-tags mr-2.5 text-[#e07a3c]"></i> 카테고리별 분석
+                </button>
+                <button onclick="switchTab('date')" id="tab-btn-date" class="tab-btn flex items-center px-6 py-3.5 text-sm font-semibold whitespace-nowrap border-b-2 border-transparent text-gray-400 hover:text-white transition-all rounded-t-lg">
+                    <i class="fas fa-calendar-days mr-2.5 text-[#e07a3c]"></i> 일자별 분석
+                </button>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              {/* Line Chart */}
-              <div className="bg-[#0f0f0f] p-6 rounded-xl border border-gray-800 lg:col-span-2 shadow-lg">
-                <h2 className="text-lg font-bold text-white mb-6">일별 매출 추이</h2>
-                <div className="h-[350px]">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={salesByDate} margin={{ top: 10, right: 10, left: 0, bottom: 20 }}>
-                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#333" />
-                      <XAxis dataKey="date" tick={{fontSize: 12, fill: '#888'}} axisLine={{stroke: '#333'}} tickLine={false} dy={10} />
-                      <YAxis tickFormatter={(value) => `${(value / 10000).toFixed(0)}만`} tick={{fontSize: 12, fill: '#888'}} axisLine={false} tickLine={false} />
-                      <RechartsTooltip content={<CustomTooltip />} />
-                      <Line type="monotone" dataKey="sales" name="매출액" stroke="#e07a3c" strokeWidth={3} dot={{r: 0}} activeDot={{r: 6, fill: '#e07a3c', stroke: '#000', strokeWidth: 2}} />
-                    </LineChart>
-                  </ResponsiveContainer>
-                </div>
-              </div>
+            <!-- TAB 1: OVERVIEW -->
+            <div id="tab-content-overview" class="tab-content space-y-8">
+                <!-- KPI Cards Grid -->
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                    <div class="bg-[#0f0f0f] p-6 rounded-xl border border-gray-800 flex items-center shadow-lg">
+                        <div class="p-4 bg-[#e07a3c]/10 text-[#e07a3c] rounded-lg mr-4 text-xl">
+                            <i class="fas fa-won-sign"></i>
+                        </div>
+                        <div>
+                            <h3 class="text-xs font-medium text-gray-400 mb-1 uppercase tracking-wider">총 매출액</h3>
+                            <p id="kpi-total-sales" class="text-2xl font-bold text-white tracking-tight">0원</p>
+                        </div>
+                    </div>
 
-              {/* Pie Chart */}
-              <div className="bg-[#0f0f0f] p-6 rounded-xl border border-gray-800 shadow-lg">
-                <h2 className="text-lg font-bold text-white mb-6">점포별 매출 비중</h2>
-                <div className="h-[350px]">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie data={salesByStore} cx="50%" cy="45%" innerRadius={70} outerRadius={100} paddingAngle={2} dataKey="value" stroke="none">
-                        {salesByStore.map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                        ))}
-                      </Pie>
-                      <RechartsTooltip content={<CustomTooltip />} />
-                      <Legend verticalAlign="bottom" height={36} iconType="circle" wrapperStyle={{fontSize: '12px', color: '#ccc'}} />
-                    </PieChart>
-                  </ResponsiveContainer>
+                    <div class="bg-[#0f0f0f] p-6 rounded-xl border border-gray-800 flex items-center shadow-lg">
+                        <div class="p-4 bg-[#e07a3c]/10 text-[#e07a3c] rounded-lg mr-4 text-xl">
+                            <i class="fas fa-cart-shopping"></i>
+                        </div>
+                        <div>
+                            <h3 class="text-xs font-medium text-gray-400 mb-1 uppercase tracking-wider">총 판매수량</h3>
+                            <p id="kpi-total-qty" class="text-2xl font-bold text-white tracking-tight">0개</p>
+                        </div>
+                    </div>
+
+                    <div class="bg-[#0f0f0f] p-6 rounded-xl border border-gray-800 flex items-center shadow-lg">
+                        <div class="p-4 bg-[#e07a3c]/10 text-[#e07a3c] rounded-lg mr-4 text-xl">
+                            <i class="fas fa-arrow-trend-up"></i>
+                        </div>
+                        <div>
+                            <h3 class="text-xs font-medium text-gray-400 mb-1 uppercase tracking-wider">평균 객단가</h3>
+                            <p id="kpi-avg-price" class="text-2xl font-bold text-white tracking-tight">0원</p>
+                        </div>
+                    </div>
+
+                    <div class="bg-[#0f0f0f] p-6 rounded-xl border border-gray-800 flex items-center shadow-lg">
+                        <div class="p-4 bg-[#e07a3c]/10 text-[#e07a3c] rounded-lg mr-4 text-xl">
+                            <i class="fas fa-percent"></i>
+                        </div>
+                        <div>
+                            <h3 class="text-xs font-medium text-gray-400 mb-1 uppercase tracking-wider">총 할인액</h3>
+                            <p id="kpi-total-discount" class="text-2xl font-bold text-white tracking-tight">0원</p>
+                        </div>
+                    </div>
                 </div>
-              </div>
+
+                <!-- Overview Charts Grid -->
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    <div class="bg-[#0f0f0f] p-6 rounded-xl border border-gray-800 lg:col-span-2 shadow-lg">
+                        <h2 class="text-lg font-bold text-white mb-6 flex items-center">
+                            <i class="fas fa-chart-line text-[#e07a3c] mr-2 text-sm"></i> 일별 매출 추이
+                        </h2>
+                        <div class="h-[320px] relative">
+                            <canvas id="overview-trend-chart"></canvas>
+                        </div>
+                    </div>
+
+                    <div class="bg-[#0f0f0f] p-6 rounded-xl border border-gray-800 shadow-lg">
+                        <h2 class="text-lg font-bold text-white mb-6 flex items-center">
+                            <i class="fas fa-chart-pie text-[#e07a3c] mr-2 text-sm"></i> 점포별 매출 비중
+                        </h2>
+                        <div class="h-[320px] relative flex items-center justify-center">
+                            <canvas id="overview-pie-chart"></canvas>
+                        </div>
+                    </div>
+                </div>
             </div>
-          </div>
-        )}
 
-        {activeTab === 'store' && (
-          <div className="space-y-6 animate-in fade-in duration-500">
-             <div className="bg-[#0f0f0f] p-6 rounded-xl border border-gray-800 shadow-lg">
-                <h2 className="text-lg font-bold text-white mb-6">점포별 매출 비교</h2>
-                <div className="h-[400px]">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={storeStats} margin={{ top: 20, right: 30, left: 20, bottom: 60 }}>
-                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#333" />
-                      <XAxis dataKey="name" tick={{fontSize: 12, fill: '#888'}} axisLine={{stroke: '#333'}} tickLine={false} angle={-45} textAnchor="end" />
-                      <YAxis tickFormatter={(value) => `${(value / 10000).toFixed(0)}만`} tick={{fontSize: 12, fill: '#888'}} axisLine={false} tickLine={false} />
-                      <RechartsTooltip content={<CustomTooltip />} cursor={{fill: 'rgba(255,255,255,0.05)'}} />
-                      <Bar dataKey="sales" name="매출액" fill="#e07a3c" radius={[4, 4, 0, 0]} maxBarSize={60} />
-                    </BarChart>
-                  </ResponsiveContainer>
+            <!-- TAB 2: STORE ANALYSIS -->
+            <div id="tab-content-store" class="tab-content hidden space-y-6">
+                <div class="bg-[#0f0f0f] p-6 rounded-xl border border-gray-800 shadow-lg">
+                    <h2 class="text-lg font-bold text-white mb-6">점포별 매출 비교</h2>
+                    <div class="h-[360px] relative">
+                        <canvas id="store-bar-chart"></canvas>
+                    </div>
                 </div>
-             </div>
-             <StatsTable title="점포별 실적 데이터" data={storeStats} nameLabel="점포명" />
-          </div>
-        )}
-
-        {activeTab === 'category' && (
-          <div className="space-y-6 animate-in fade-in duration-500">
-             <div className="bg-[#0f0f0f] p-6 rounded-xl border border-gray-800 shadow-lg">
-                <h2 className="text-lg font-bold text-white mb-6">카테고리별 매출 비교</h2>
-                <div className="h-[400px]">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={categoryStats} margin={{ top: 20, right: 30, left: 20, bottom: 60 }}>
-                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#333" />
-                      <XAxis dataKey="name" tick={{fontSize: 12, fill: '#888'}} axisLine={{stroke: '#333'}} tickLine={false} angle={-45} textAnchor="end" />
-                      <YAxis tickFormatter={(value) => `${(value / 10000).toFixed(0)}만`} tick={{fontSize: 12, fill: '#888'}} axisLine={false} tickLine={false} />
-                      <RechartsTooltip content={<CustomTooltip />} cursor={{fill: 'rgba(255,255,255,0.05)'}} />
-                      <Bar dataKey="sales" name="매출액" fill="#f59e6c" radius={[4, 4, 0, 0]} maxBarSize={60} />
-                    </BarChart>
-                  </ResponsiveContainer>
+                
+                <div class="bg-[#0f0f0f] rounded-xl shadow-lg border border-gray-800 overflow-hidden">
+                    <div class="p-6 border-b border-gray-800">
+                        <h2 class="text-lg font-bold text-white">점포별 실적 데이터</h2>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-sm text-left text-gray-300">
+                            <thead class="text-xs text-gray-400 uppercase bg-[#1a1a1a] border-b border-gray-800">
+                                <tr>
+                                    <th class="px-6 py-4 font-semibold">점포명</th>
+                                    <th class="px-6 py-4 font-semibold text-right">매출액</th>
+                                    <th class="px-6 py-4 font-semibold text-right">판매수량</th>
+                                    <th class="px-6 py-4 font-semibold text-right">할인액</th>
+                                    <th class="px-6 py-4 font-semibold text-right">객단가</th>
+                                </tr>
+                            </thead>
+                            <tbody id="store-table-body">
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
-             </div>
-             <StatsTable title="카테고리별 실적 데이터" data={categoryStats} nameLabel="카테고리명" />
-          </div>
-        )}
+            </div>
 
-        {activeTab === 'date' && (
-          <div className="space-y-6 animate-in fade-in duration-500">
-             <div className="bg-[#0f0f0f] p-6 rounded-xl border border-gray-800 shadow-lg">
-                <h2 className="text-lg font-bold text-white mb-6">일자별 매출 추이</h2>
-                <div className="h-[400px]">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={dateStats} margin={{ top: 20, right: 30, left: 20, bottom: 20 }}>
-                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#333" />
-                      <XAxis dataKey="date" tick={{fontSize: 12, fill: '#888'}} axisLine={{stroke: '#333'}} tickLine={false} />
-                      <YAxis tickFormatter={(value) => `${(value / 10000).toFixed(0)}만`} tick={{fontSize: 12, fill: '#888'}} axisLine={false} tickLine={false} />
-                      <RechartsTooltip content={<CustomTooltip />} />
-                      <Line type="area" dataKey="sales" name="매출액" stroke="#fcd34d" strokeWidth={3} dot={{r: 4, fill: '#fcd34d', strokeWidth: 0}} activeDot={{r: 6, stroke: '#000', strokeWidth: 2}} />
-                    </LineChart>
-                  </ResponsiveContainer>
+            <!-- TAB 3: CATEGORY ANALYSIS -->
+            <div id="tab-content-category" class="tab-content hidden space-y-6">
+                <div class="bg-[#0f0f0f] p-6 rounded-xl border border-gray-800 shadow-lg">
+                    <h2 class="text-lg font-bold text-white mb-6">카테고리별 매출 비교</h2>
+                    <div class="h-[360px] relative">
+                        <canvas id="category-bar-chart"></canvas>
+                    </div>
                 </div>
-             </div>
-             <StatsTable title="일자별 실적 데이터" data={dateStats} nameLabel="일자" nameKey="date" />
-          </div>
-        )}
 
-      </div>
+                <div class="bg-[#0f0f0f] rounded-xl shadow-lg border border-gray-800 overflow-hidden">
+                    <div class="p-6 border-b border-gray-800">
+                        <h2 class="text-lg font-bold text-white">카테고리별 실적 데이터</h2>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-sm text-left text-gray-300">
+                            <thead class="text-xs text-gray-400 uppercase bg-[#1a1a1a] border-b border-gray-800">
+                                <tr>
+                                    <th class="px-6 py-4 font-semibold">카테고리명</th>
+                                    <th class="px-6 py-4 font-semibold text-right">매출액</th>
+                                    <th class="px-6 py-4 font-semibold text-right">판매수량</th>
+                                    <th class="px-6 py-4 font-semibold text-right">할인액</th>
+                                    <th class="px-6 py-4 font-semibold text-right">객단가</th>
+                                </tr>
+                            </thead>
+                            <tbody id="category-table-body">
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- TAB 4: DATE ANALYSIS -->
+            <div id="tab-content-date" class="tab-content hidden space-y-6">
+                <div class="bg-[#0f0f0f] p-6 rounded-xl border border-gray-800 shadow-lg">
+                    <h2 class="text-lg font-bold text-white mb-6">일자별 매출 추이</h2>
+                    <div class="h-[360px] relative">
+                        <canvas id="date-line-chart"></canvas>
+                    </div>
+                </div>
+
+                <div class="bg-[#0f0f0f] rounded-xl shadow-lg border border-gray-800 overflow-hidden">
+                    <div class="p-6 border-b border-gray-800">
+                        <h2 class="text-lg font-bold text-white">일자별 실적 데이터</h2>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-sm text-left text-gray-300">
+                            <thead class="text-xs text-gray-400 uppercase bg-[#1a1a1a] border-b border-gray-800">
+                                <tr>
+                                    <th class="px-6 py-4 font-semibold">일자</th>
+                                    <th class="px-6 py-4 font-semibold text-right">매출액</th>
+                                    <th class="px-6 py-4 font-semibold text-right">판매수량</th>
+                                    <th class="px-6 py-4 font-semibold text-right">할인액</th>
+                                    <th class="px-6 py-4 font-semibold text-right">객단가</th>
+                                </tr>
+                            </thead>
+                            <tbody id="date-table-body">
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+        </section>
     </div>
-  );
-}
+
+    <!-- Floating Bottom-Right Chat Widget -->
+    <div id="chat-widget-container" class="fixed bottom-6 right-6 flex items-end gap-3 z-50 no-print">
+        <div class="hidden sm:flex bg-white text-black rounded-lg py-2 px-4 shadow-xl items-center gap-2 mb-2 animate-bounce cursor-pointer hover:bg-gray-100 transition-colors">
+            <div class="w-6 h-6 bg-black rounded-full flex items-center justify-center">
+                <span class="text-white text-[10px] font-bold">R</span>
+            </div>
+            <span class="text-xs font-semibold">Sales Analytics Active</span>
+        </div>
+        <button class="bg-[#e07a3c] hover:bg-[#c8662e] text-white rounded-2xl w-14 h-14 flex items-center justify-center shadow-2xl transition-transform transform hover:scale-105 relative">
+            <i class="fas fa-comment text-xl"></i>
+            <span class="absolute top-0 right-0 w-3.5 h-3.5 bg-red-500 border-2 border-[#e07a3c] rounded-full"></span>
+        </button>
+    </div>
+
+    <script>
+        // Global State & Chart Instances
+        let dashboardData = null;
+        let chartInstances = {};
+        let currentActiveTab = 'overview';
+
+        const COLOR_PALETTE = ['#e07a3c', '#f59e6c', '#fcd34d', '#fbbf24', '#f87171', '#fca5a5', '#60a5fa', '#34d399'];
+
+        // Dropdown toggle & outside click handling
+        function togglePdfDropdown(event) {
+            event.stopPropagation();
+            const menu = document.getElementById('pdf-dropdown-menu');
+            if (menu) menu.classList.toggle('hidden');
+        }
+
+        function hidePdfDropdown() {
+            const menu = document.getElementById('pdf-dropdown-menu');
+            if (menu) menu.classList.add('hidden');
+        }
+
+        document.addEventListener('click', function(e) {
+            const wrapper = document.getElementById('pdf-dropdown-wrapper');
+            if (wrapper && !wrapper.contains(e.target)) {
+                hidePdfDropdown();
+            }
+        });
+
+        // Sample Data for instant demo
+        function loadSampleData() {
+            const sampleCSV = `일자,점포,카테고리,매출액,판매수량,할인액
+2026-09-01,강남점,의류,1850000,32,75000
+2026-09-01,홍대점,식품,920000,85,30000
+2026-09-01,판교점,전자기기,4100000,12,150000
+2026-09-01,명동점,화장품,1420000,45,50000
+2026-09-02,강남점,식품,740000,62,20000
+2026-09-02,홍대점,의류,1280000,24,45000
+2026-09-02,판교점,식품,1350000,110,60000
+2026-09-02,명동점,의류,1680000,28,55000
+2026-09-03,강남점,전자기기,3600000,9,120000
+2026-09-03,홍대점,식품,890000,75,15000
+2026-09-03,판교점,의류,1920000,38,70000
+2026-09-03,명동점,전자기기,2950000,6,80000
+2026-09-04,강남점,화장품,1250000,40,40000
+2026-09-04,홍대점,전자기기,2450000,7,65000
+2026-09-04,판교점,화장품,980000,32,30000
+2026-09-04,명동점,식품,860000,70,25000`;
+
+            const rawData = parseCSV(sampleCSV);
+            processAndRender(rawData, '2026년_9월_매출현황_샘플.csv');
+        }
+
+        // Custom Safe CSV Parser
+        function parseCSV(str) {
+            const arr = [];
+            let quote = false;
+            let row = 0, col = 0;
+            for (let c = 0; c < str.length; c++) {
+                let cc = str[c], nc = str[c + 1];
+                arr[row] = arr[row] || [];
+                arr[row][col] = arr[row][col] || '';
+                if (cc === '"' && quote && nc === '"') { arr[row][col] += cc; ++c; continue; }
+                if (cc === '"') { quote = !quote; continue; }
+                if (cc === ',' && !quote) { ++col; continue; }
+                if (cc === '\r' && nc === '\n' && !quote) { ++row; col = 0; ++c; continue; }
+                if (cc === '\n' && !quote) { ++row; col = 0; continue; }
+                if (cc === '\r' && !quote) { ++row; col = 0; continue; }
+                arr[row][col] += cc;
+            }
+            if (arr.length < 2) return [];
+
+            const headers = arr[0].map(h => h.trim());
+            const data = [];
+            for (let i = 1; i < arr.length; i++) {
+                if (arr[i].length !== headers.length) continue;
+                let obj = {};
+                arr[i].forEach((val, idx) => {
+                    let cleanVal = val.trim();
+                    const numVal = Number(cleanVal.replace(/,/g, ''));
+                    obj[headers[idx]] = isNaN(numVal) || cleanVal === '' ? cleanVal : numVal;
+                });
+                data.push(obj);
+            }
+            return data;
+        }
+
+        document.getElementById('csv-file-input').addEventListener('change', handleFileSelect);
+        document.getElementById('csv-file-reinput').addEventListener('change', handleFileSelect);
+
+        function handleFileSelect(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const fileName = file.name;
+            const reader = new FileReader();
+
+            reader.onload = function(e) {
+                const text = e.target.result;
+                const rawData = parseCSV(text);
+                if (rawData.length === 0) {
+                    alert("CSV 데이터를 올바르게 읽을 수 없습니다. 포맷을 확인해주세요.");
+                    return;
+                }
+                processAndRender(rawData, fileName);
+            };
+
+            reader.readAsText(file, 'utf-8');
+        }
+
+        function processAndRender(data, fileName) {
+            let totalSales = 0, totalQty = 0, totalDiscount = 0;
+            const dateMap = {}, storeMap = {}, categoryMap = {};
+
+            data.forEach(row => {
+                const sales = Number(row['매출액']) || 0;
+                const qty = Number(row['판매수량']) || 0;
+                const discount = Number(row['할인액']) || 0;
+                const date = row['일자'] || '기타';
+                const store = row['점포'] || '기타';
+                const category = row['카테고리'] || '기타';
+
+                totalSales += sales;
+                totalQty += qty;
+                totalDiscount += discount;
+
+                const aggregate = (map, key) => {
+                    if (!map[key]) map[key] = { sales: 0, qty: 0, discount: 0 };
+                    map[key].sales += sales;
+                    map[key].qty += qty;
+                    map[key].discount += discount;
+                };
+
+                aggregate(dateMap, date);
+                aggregate(storeMap, store);
+                aggregate(categoryMap, category);
+            });
+
+            const formatStats = (mapData, nameKey = 'name') =>
+                Object.entries(mapData)
+                    .map(([name, stats]) => ({ [nameKey]: name, ...stats }))
+                    .sort((a, b) => b.sales - a.sales);
+
+            const dateStats = Object.entries(dateMap)
+                .map(([date, stats]) => ({ date, ...stats }))
+                .sort((a, b) => (a.date > b.date ? 1 : -1));
+
+            dashboardData = {
+                fileName,
+                rowCount: data.length,
+                kpis: {
+                    totalSales,
+                    totalQty,
+                    totalDiscount,
+                    avgPrice: totalQty > 0 ? Math.round(totalSales / totalQty) : 0
+                },
+                storeStats: formatStats(storeMap),
+                categoryStats: formatStats(categoryMap),
+                dateStats: dateStats
+            };
+
+            // Switch view from Landing to Dashboard
+            document.getElementById('landing-view').classList.add('hidden');
+            document.getElementById('dashboard-view').classList.remove('hidden');
+
+            // Set Header Info
+            document.getElementById('file-name-display').innerText = fileName;
+            document.getElementById('file-rows-display').innerText = `총 ${data.length.toLocaleString()}건의 데이터`;
+
+            // Update KPIs
+            document.getElementById('kpi-total-sales').innerText = dashboardData.kpis.totalSales.toLocaleString() + '원';
+            document.getElementById('kpi-total-qty').innerText = dashboardData.kpis.totalQty.toLocaleString() + '개';
+            document.getElementById('kpi-avg-price').innerText = dashboardData.kpis.avgPrice.toLocaleString() + '원';
+            document.getElementById('kpi-total-discount').innerText = dashboardData.kpis.totalDiscount.toLocaleString() + '원';
+
+            // Render Overview Charts & Tables
+            renderOverviewTab();
+            renderStoreTab();
+            renderCategoryTab();
+            renderDateTab();
+
+            // Default active tab
+            switchTab('overview');
+        }
+
+        function switchTab(tabName) {
+            currentActiveTab = tabName;
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+
+            const target = document.getElementById(`tab-content-${tabName}`);
+            if (target) target.classList.remove('hidden');
+            const targetBtn = document.getElementById(`tab-btn-${tabName}`);
+            if (targetBtn) targetBtn.classList.add('active');
+
+            // Resize Chart to ensure sharp display
+            if (tabName === 'store' && chartInstances['store-bar-chart']) chartInstances['store-bar-chart'].resize();
+            if (tabName === 'category' && chartInstances['category-bar-chart']) chartInstances['category-bar-chart'].resize();
+            if (tabName === 'date' && chartInstances['date-line-chart']) chartInstances['date-line-chart'].resize();
+            if (tabName === 'overview') {
+                if (chartInstances['overview-trend-chart']) chartInstances['overview-trend-chart'].resize();
+                if (chartInstances['overview-pie-chart']) chartInstances['overview-pie-chart'].resize();
+            }
+        }
+
+        function destroyChart(chartId) {
+            if (chartInstances[chartId]) {
+                chartInstances[chartId].destroy();
+                delete chartInstances[chartId];
+            }
+        }
+
+        // 1. Overview Tab Charts
+        function renderOverviewTab() {
+            destroyChart('overview-trend-chart');
+            destroyChart('overview-pie-chart');
+
+            const ctxTrend = document.getElementById('overview-trend-chart').getContext('2d');
+            chartInstances['overview-trend-chart'] = new Chart(ctxTrend, {
+                type: 'line',
+                data: {
+                    labels: dashboardData.dateStats.map(d => d.date),
+                    datasets: [{
+                        label: '매출액 (원)',
+                        data: dashboardData.dateStats.map(d => d.sales),
+                        borderColor: '#e07a3c',
+                        backgroundColor: 'rgba(224, 122, 60, 0.1)',
+                        fill: true,
+                        tension: 0.3,
+                        pointRadius: 4,
+                        pointBackgroundColor: '#e07a3c'
+                    }]
+                },
+                options: getChartOptions()
+            });
+
+            const ctxPie = document.getElementById('overview-pie-chart').getContext('2d');
+            chartInstances['overview-pie-chart'] = new Chart(ctxPie, {
+                type: 'doughnut',
+                data: {
+                    labels: dashboardData.storeStats.map(s => s.name),
+                    datasets: [{
+                        data: dashboardData.storeStats.map(s => s.sales),
+                        backgroundColor: COLOR_PALETTE,
+                        borderWidth: 0
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { position: 'bottom', labels: { color: '#ccc', font: { family: 'Inter' } } }
+                    }
+                }
+            });
+        }
+
+        // 2. Store Tab Render
+        function renderStoreTab() {
+            destroyChart('store-bar-chart');
+
+            const ctxBar = document.getElementById('store-bar-chart').getContext('2d');
+            chartInstances['store-bar-chart'] = new Chart(ctxBar, {
+                type: 'bar',
+                data: {
+                    labels: dashboardData.storeStats.map(s => s.name),
+                    datasets: [{
+                        label: '매출액 (원)',
+                        data: dashboardData.storeStats.map(s => s.sales),
+                        backgroundColor: '#e07a3c',
+                        borderRadius: 6
+                    }]
+                },
+                options: getChartOptions()
+            });
+
+            populateTable('store-table-body', dashboardData.storeStats, 'name');
+        }
+
+        // 3. Category Tab Render
+        function renderCategoryTab() {
+            destroyChart('category-bar-chart');
+
+            const ctxBar = document.getElementById('category-bar-chart').getContext('2d');
+            chartInstances['category-bar-chart'] = new Chart(ctxBar, {
+                type: 'bar',
+                data: {
+                    labels: dashboardData.categoryStats.map(c => c.name),
+                    datasets: [{
+                        label: '매출액 (원)',
+                        data: dashboardData.categoryStats.map(c => c.sales),
+                        backgroundColor: '#f59e6c',
+                        borderRadius: 6
+                    }]
+                },
+                options: getChartOptions()
+            });
+
+            populateTable('category-table-body', dashboardData.categoryStats, 'name');
+        }
+
+        // 4. Date Tab Render
+        function renderDateTab() {
+            destroyChart('date-line-chart');
+
+            const ctxLine = document.getElementById('date-line-chart').getContext('2d');
+            chartInstances['date-line-chart'] = new Chart(ctxLine, {
+                type: 'line',
+                data: {
+                    labels: dashboardData.dateStats.map(d => d.date),
+                    datasets: [{
+                        label: '매출액 (원)',
+                        data: dashboardData.dateStats.map(d => d.sales),
+                        borderColor: '#fcd34d',
+                        backgroundColor: 'rgba(252, 211, 77, 0.15)',
+                        fill: true,
+                        tension: 0.2,
+                        pointRadius: 5,
+                        pointBackgroundColor: '#fcd34d'
+                    }]
+                },
+                options: getChartOptions()
+            });
+
+            populateTable('date-table-body', dashboardData.dateStats, 'date');
+        }
+
+        function populateTable(elementId, rows, keyName) {
+            const tbody = document.getElementById(elementId);
+            tbody.innerHTML = '';
+
+            rows.forEach(row => {
+                const tr = document.createElement('tr');
+                tr.className = "border-b border-gray-800 hover:bg-white/5 transition-colors";
+                
+                const avgPrice = row.qty > 0 ? Math.round(row.sales / row.qty) : 0;
+
+                tr.innerHTML = `
+                    <td class="px-6 py-4 font-medium text-white">${row[keyName]}</td>
+                    <td class="px-6 py-4 text-right text-[#e07a3c] font-semibold">${row.sales.toLocaleString()}원</td>
+                    <td class="px-6 py-4 text-right">${row.qty.toLocaleString()}개</td>
+                    <td class="px-6 py-4 text-right text-red-400">${row.discount.toLocaleString()}원</td>
+                    <td class="px-6 py-4 text-right">${avgPrice.toLocaleString()}원</td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        // Shared Chart.js Dark Theme Options
+        function getChartOptions() {
+            return {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    x: {
+                        grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                        ticks: { color: '#888', font: { family: 'Inter' } }
+                    },
+                    y: {
+                        grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                        ticks: {
+                            color: '#888',
+                            font: { family: 'Inter' },
+                            callback: function(val) { return (val / 10000).toLocaleString() + '만'; }
+                        }
+                    }
+                },
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        backgroundColor: '#111',
+                        titleColor: '#888',
+                        bodyColor: '#e07a3c',
+                        borderColor: '#222',
+                        borderWidth: 1,
+                        padding: 12,
+                        callbacks: {
+                            label: function(context) {
+                                return context.dataset.label + ': ' + context.parsed.y.toLocaleString() + '원';
+                            }
+                        }
+                    }
+                }
+            };
+        }
+
+        // ==========================================
+        // PDF EXPORT IMPLEMENTATION
+        // ==========================================
+
+        function showPdfLoading(title, desc) {
+            const overlay = document.getElementById('pdf-loading-overlay');
+            if (overlay) {
+                if (title) document.getElementById('pdf-loading-title').innerText = title;
+                if (desc) document.getElementById('pdf-loading-desc').innerText = desc;
+                overlay.classList.remove('hidden');
+            }
+        }
+
+        function hidePdfLoading() {
+            const overlay = document.getElementById('pdf-loading-overlay');
+            if (overlay) overlay.classList.add('hidden');
+        }
+
+        // Convert any Chart.js instance to a static Image tag for perfect rendering in PDF
+        function getChartImageTag(chartId, height = '320px') {
+            const chart = chartInstances[chartId];
+            if (!chart) return `<div class="h-[${height}] flex items-center justify-center text-gray-500">차트 준비 중</div>`;
+            try {
+                const dataUrl = chart.toBase64Image();
+                return `<div style="height: ${height}; display: flex; align-items: center; justify-content: center;">
+                    <img src="${dataUrl}" style="max-width: 100%; max-height: 100%; object-fit: contain;" />
+                </div>`;
+            } catch (e) {
+                console.error("Chart conversion error:", e);
+                return `<div class="h-[${height}]"></div>`;
+            }
+        }
+
+        async function exportToPDF(mode = 'current') {
+            hidePdfDropdown();
+
+            if (!dashboardData) {
+                alert("먼저 CSV 데이터를 업로드해 주세요.");
+                return;
+            }
+
+            const now = new Date();
+            const dateStr = now.toISOString().slice(0, 10);
+            const timeStr = now.toTimeString().slice(0, 5);
+            const baseFileName = dashboardData.fileName.replace(/\.[^/.]+$/, "");
+            const pdfFileName = mode === 'all' 
+                ? `${baseFileName}_Sales_Comprehensive_Report_${dateStr}.pdf`
+                : `${baseFileName}_Sales_${currentActiveTab}_Report_${dateStr}.pdf`;
+
+            showPdfLoading(
+                mode === 'all' ? '전체 종합 리포트 PDF 생성 중' : '현재 분석 탭 PDF 생성 중',
+                '차트와 표 데이터를 고해상도로 문서화하고 있습니다...'
+            );
+
+            // Re-render all charts temporarily to make sure buffers are complete
+            if (chartInstances['overview-trend-chart']) chartInstances['overview-trend-chart'].update();
+            if (chartInstances['overview-pie-chart']) chartInstances['overview-pie-chart'].update();
+            if (chartInstances['store-bar-chart']) chartInstances['store-bar-chart'].update();
+            if (chartInstances['category-bar-chart']) chartInstances['category-bar-chart'].update();
+            if (chartInstances['date-line-chart']) chartInstances['date-line-chart'].update();
+
+            // Give browser a frame to paint
+            await new Promise(r => setTimeout(r, 200));
+
+            // Create an isolated printable container matching dashboard dark aesthetic
+            const exportContainer = document.createElement('div');
+            exportContainer.style.width = '1000px';
+            exportContainer.style.padding = '32px';
+            exportContainer.style.backgroundColor = '#050505';
+            exportContainer.style.color = '#ffffff';
+            exportContainer.style.fontFamily = "'Inter', sans-serif";
+            exportContainer.style.position = 'fixed';
+            exportContainer.style.left = '-9999px';
+            exportContainer.style.top = '0';
+            exportContainer.style.zIndex = '-999';
+
+            // Common Header for PDF
+            const reportHeaderHTML = `
+                <div style="border-bottom: 1px solid #262626; padding-bottom: 20px; margin-bottom: 24px;">
+                    <div style="display: flex; justify-content: space-between; align-items: flex-end;">
+                        <div>
+                            <div style="color: #e07a3c; font-size: 11px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; margin-bottom: 6px;">Sales Analytics Report</div>
+                            <h1 style="font-size: 26px; font-weight: 800; color: #ffffff; margin: 0; line-height: 1.2;">매출 데이터 분석 보고서</h1>
+                        </div>
+                        <div style="text-align: right; font-size: 11px; color: #999999;">
+                            <div><strong>파일명:</strong> ${dashboardData.fileName}</div>
+                            <div><strong>데이터:</strong> ${dashboardData.rowCount.toLocaleString()}건 | <strong>발행:</strong> ${dateStr} ${timeStr}</div>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            // Common KPI Cards HTML
+            const kpiCardsHTML = `
+                <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 28px;" class="pdf-avoid-break">
+                    <div style="background: #0f0f0f; border: 1px solid #222; border-radius: 10px; padding: 16px;">
+                        <div style="font-size: 10px; color: #888; text-transform: uppercase; margin-bottom: 6px; font-weight: 600;">총 매출액</div>
+                        <div style="font-size: 19px; font-weight: 800; color: #ffffff;">${dashboardData.kpis.totalSales.toLocaleString()}원</div>
+                    </div>
+                    <div style="background: #0f0f0f; border: 1px solid #222; border-radius: 10px; padding: 16px;">
+                        <div style="font-size: 10px; color: #888; text-transform: uppercase; margin-bottom: 6px; font-weight: 600;">총 판매수량</div>
+                        <div style="font-size: 19px; font-weight: 800; color: #ffffff;">${dashboardData.kpis.totalQty.toLocaleString()}개</div>
+                    </div>
+                    <div style="background: #0f0f0f; border: 1px solid #222; border-radius: 10px; padding: 16px;">
+                        <div style="font-size: 10px; color: #888; text-transform: uppercase; margin-bottom: 6px; font-weight: 600;">평균 객단가</div>
+                        <div style="font-size: 19px; font-weight: 800; color: #ffffff;">${dashboardData.kpis.avgPrice.toLocaleString()}원</div>
+                    </div>
+                    <div style="background: #0f0f0f; border: 1px solid #222; border-radius: 10px; padding: 16px;">
+                        <div style="font-size: 10px; color: #888; text-transform: uppercase; margin-bottom: 6px; font-weight: 600;">총 할인액</div>
+                        <div style="font-size: 19px; font-weight: 800; color: #ffffff;">${dashboardData.kpis.totalDiscount.toLocaleString()}원</div>
+                    </div>
+                </div>
+            `;
+
+            // Helper to build clean HTML Table for PDF
+            function buildTableHTML(title, rows, keyName) {
+                let rowItems = rows.map(r => {
+                    const avgPrice = r.qty > 0 ? Math.round(r.sales / r.qty) : 0;
+                    return `
+                        <tr style="border-bottom: 1px solid #1f1f1f;">
+                            <td style="padding: 10px 14px; color: #ffffff; font-weight: 500;">${r[keyName]}</td>
+                            <td style="padding: 10px 14px; text-align: right; color: #e07a3c; font-weight: 700;">${r.sales.toLocaleString()}원</td>
+                            <td style="padding: 10px 14px; text-align: right; color: #cccccc;">${r.qty.toLocaleString()}개</td>
+                            <td style="padding: 10px 14px; text-align: right; color: #f87171;">${r.discount.toLocaleString()}원</td>
+                            <td style="padding: 10px 14px; text-align: right; color: #cccccc;">${avgPrice.toLocaleString()}원</td>
+                        </tr>
+                    `;
+                }).join('');
+
+                return `
+                    <div style="background: #0f0f0f; border: 1px solid #222; border-radius: 10px; overflow: hidden; margin-top: 18px;" class="pdf-avoid-break">
+                        <div style="padding: 14px 18px; border-bottom: 1px solid #222; font-size: 14px; font-weight: 700; color: #ffffff;">
+                            ${title}
+                        </div>
+                        <table style="width: 100%; border-collapse: collapse; font-size: 12px;">
+                            <thead>
+                                <tr style="background: #171717; border-bottom: 1px solid #262626; color: #888888; font-size: 11px;">
+                                    <th style="padding: 10px 14px; text-align: left;">항목명</th>
+                                    <th style="padding: 10px 14px; text-align: right;">매출액</th>
+                                    <th style="padding: 10px 14px; text-align: right;">판매수량</th>
+                                    <th style="padding: 10px 14px; text-align: right;">할인액</th>
+                                    <th style="padding: 10px 14px; text-align: right;">객단가</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${rowItems}
+                            </tbody>
+                        </table>
+                    </div>
+                `;
+            }
+
+            let bodyContentHTML = '';
+
+            if (mode === 'current') {
+                if (currentActiveTab === 'overview') {
+                    bodyContentHTML = `
+                        <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 16px;">
+                            <div style="background: #0f0f0f; border: 1px solid #222; border-radius: 10px; padding: 18px;" class="pdf-avoid-break">
+                                <h3 style="font-size: 14px; font-weight: 700; margin: 0 0 16px 0; color: #ffffff;">일별 매출 추이</h3>
+                                ${getChartImageTag('overview-trend-chart', '280px')}
+                            </div>
+                            <div style="background: #0f0f0f; border: 1px solid #222; border-radius: 10px; padding: 18px;" class="pdf-avoid-break">
+                                <h3 style="font-size: 14px; font-weight: 700; margin: 0 0 16px 0; color: #ffffff;">점포별 매출 비중</h3>
+                                ${getChartImageTag('overview-pie-chart', '280px')}
+                            </div>
+                        </div>
+                    `;
+                } else if (currentActiveTab === 'store') {
+                    bodyContentHTML = `
+                        <div style="background: #0f0f0f; border: 1px solid #222; border-radius: 10px; padding: 18px; margin-bottom: 20px;" class="pdf-avoid-break">
+                            <h3 style="font-size: 14px; font-weight: 700; margin: 0 0 16px 0; color: #ffffff;">점포별 매출 비교</h3>
+                            ${getChartImageTag('store-bar-chart', '300px')}
+                        </div>
+                        ${buildTableHTML('점포별 실적 데이터', dashboardData.storeStats, 'name')}
+                    `;
+                } else if (currentActiveTab === 'category') {
+                    bodyContentHTML = `
+                        <div style="background: #0f0f0f; border: 1px solid #222; border-radius: 10px; padding: 18px; margin-bottom: 20px;" class="pdf-avoid-break">
+                            <h3 style="font-size: 14px; font-weight: 700; margin: 0 0 16px 0; color: #ffffff;">카테고리별 매출 비교</h3>
+                            ${getChartImageTag('category-bar-chart', '300px')}
+                        </div>
+                        ${buildTableHTML('카테고리별 실적 데이터', dashboardData.categoryStats, 'name')}
+                    `;
+                } else if (currentActiveTab === 'date') {
+                    bodyContentHTML = `
+                        <div style="background: #0f0f0f; border: 1px solid #222; border-radius: 10px; padding: 18px; margin-bottom: 20px;" class="pdf-avoid-break">
+                            <h3 style="font-size: 14px; font-weight: 700; margin: 0 0 16px 0; color: #ffffff;">일자별 매출 추이</h3>
+                            ${getChartImageTag('date-line-chart', '300px')}
+                        </div>
+                        ${buildTableHTML('일자별 실적 데이터', dashboardData.dateStats, 'date')}
+                    `;
+                }
+            } else {
+                bodyContentHTML = `
+                    <div style="margin-bottom: 30px;" class="pdf-avoid-break">
+                        <h2 style="font-size: 17px; font-weight: 800; color: #e07a3c; margin: 0 0 14px 0; border-left: 4px solid #e07a3c; padding-left: 10px;">1. 종합 요약</h2>
+                        <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 16px;">
+                            <div style="background: #0f0f0f; border: 1px solid #222; border-radius: 10px; padding: 16px;">
+                                <h4 style="font-size: 13px; font-weight: 700; margin: 0 0 12px 0; color: #fff;">일별 매출 추이</h4>
+                                ${getChartImageTag('overview-trend-chart', '240px')}
+                            </div>
+                            <div style="background: #0f0f0f; border: 1px solid #222; border-radius: 10px; padding: 16px;">
+                                <h4 style="font-size: 13px; font-weight: 700; margin: 0 0 12px 0; color: #fff;">점포별 매출 비중</h4>
+                                ${getChartImageTag('overview-pie-chart', '240px')}
+                            </div>
+                        </div>
+                    </div>
+
+                    <div style="margin-bottom: 30px; page-break-before: always; break-before: page;" class="pdf-avoid-break">
+                        <h2 style="font-size: 17px; font-weight: 800; color: #e07a3c; margin: 0 0 14px 0; border-left: 4px solid #e07a3c; padding-left: 10px;">2. 점포별 실적 분석</h2>
+                        <div style="background: #0f0f0f; border: 1px solid #222; border-radius: 10px; padding: 16px; margin-bottom: 14px;">
+                            ${getChartImageTag('store-bar-chart', '240px')}
+                        </div>
+                        ${buildTableHTML('점포별 실적 상세 내역', dashboardData.storeStats, 'name')}
+                    </div>
+
+                    <div style="margin-bottom: 30px; page-break-before: always; break-before: page;" class="pdf-avoid-break">
+                        <h2 style="font-size: 17px; font-weight: 800; color: #e07a3c; margin: 0 0 14px 0; border-left: 4px solid #e07a3c; padding-left: 10px;">3. 카테고리별 실적 분석</h2>
+                        <div style="background: #0f0f0f; border: 1px solid #222; border-radius: 10px; padding: 16px; margin-bottom: 14px;">
+                            ${getChartImageTag('category-bar-chart', '240px')}
+                        </div>
+                        ${buildTableHTML('카테고리별 실적 상세 내역', dashboardData.categoryStats, 'name')}
+                    </div>
+
+                    <div style="margin-bottom: 20px; page-break-before: always; break-before: page;" class="pdf-avoid-break">
+                        <h2 style="font-size: 17px; font-weight: 800; color: #e07a3c; margin: 0 0 14px 0; border-left: 4px solid #e07a3c; padding-left: 10px;">4. 일자별 매출 추이 상세</h2>
+                        <div style="background: #0f0f0f; border: 1px solid #222; border-radius: 10px; padding: 16px; margin-bottom: 14px;">
+                            ${getChartImageTag('date-line-chart', '240px')}
+                        </div>
+                        ${buildTableHTML('일자별 실적 상세 내역', dashboardData.dateStats, 'date')}
+                    </div>
+                `;
+            }
+
+            // Report Footer HTML
+            const footerHTML = `
+                <div style="margin-top: 32px; padding-top: 16px; border-top: 1px solid #222; text-align: center; color: #666; font-size: 10px;">
+                    Sales Analytics Dashboard • Generated automatically on ${dateStr} ${timeStr} • Confidential
+                </div>
+            `;
+
+            exportContainer.innerHTML = reportHeaderHTML + kpiCardsHTML + bodyContentHTML + footerHTML;
+            document.body.appendChild(exportContainer);
+
+            // Configure html2pdf options
+            const opt = {
+                margin: [10, 10, 12, 10],
+                filename: pdfFileName,
+                image: { type: 'jpeg', quality: 0.98 },
+                html2canvas: {
+                    scale: 2,
+                    useCORS: true,
+                    backgroundColor: '#050505',
+                    logging: false,
+                    scrollX: 0,
+                    scrollY: 0
+                },
+                jsPDF: {
+                    unit: 'mm',
+                    format: 'a4',
+                    orientation: 'portrait'
+                },
+                pagebreak: { mode: ['css', 'legacy'] }
+            };
+
+            try {
+                await html2pdf().set(opt).from(exportContainer).save();
+            } catch (err) {
+                console.error("PDF 생성 에러:", err);
+                alert("PDF 생성 중 오류가 발생했습니다. 브라우저 인쇄(Ctrl+P) 기능을 이용해 보세요.");
+            } finally {
+                if (document.body.contains(exportContainer)) {
+                    document.body.removeChild(exportContainer);
+                }
+                hidePdfLoading();
+            }
+        }
+    </script>
+</body>
+</html>
